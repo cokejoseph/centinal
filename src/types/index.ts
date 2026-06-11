@@ -178,6 +178,11 @@ export interface Order {
   gross_amount: number
   discount_amount: number
   shipping_charge?: number
+  razorpay_payment_id?: string | null
+  razorpay_fee?: number        // in rupees; populated by payment.captured webhook
+  razorpay_tax?: number        // GST on fee, in rupees
+  shipping_cost?: number       // actual Shiprocket freight charge
+  shiprocket_shipment_id?: number | null
   payment_status: PaymentStatus
   payment_method: PaymentMethod
   fulfillment_status: FulfillmentStatus

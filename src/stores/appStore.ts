@@ -5,6 +5,8 @@ import {
   DEMO_CUSTOMERS, DEMO_ORDERS, DEMO_PAYMENTS, DEMO_EXCEPTIONS, DEMO_INTEGRATIONS,
 } from '../data/seed'
 import { mockGenerateLabels } from '../lib/services'
+import { createShipment } from '../lib/shiprocket'
+import type { ShipmentPayload } from '../lib/shiprocket'
 import type {
   Brand, BrandMember, Warehouse, Product, Customer, Order,
   Payment, Exception, Integration, PlanType,
@@ -280,12 +282,69 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   generateLabels: (ids) => {
+    // Optimistic update using mock while real API calls run in background
     const result = mockGenerateLabels(ids)
-    const { orders } = get()
+    const { orders, integrations } = get()
+
+    const srIntegration = integrations.find(i => i.platform === 'SHIPROCKET' && i.status === 'CONNECTED')
+
     const updatedOrders = orders.map(o => {
       const labelResult = result.results.find(r => r.order_id === o.id)
       if (!labelResult) return o
-      const updatedOrder = {
+
+      // Fire real Shiprocket call when credentials are available
+      if (!DEMO_MODE && srIntegration) {
+        const payload: ShipmentPayload = {
+          order_number: o.order_number,
+          billing_customer_name: o.shipping_address.name,
+          billing_phone: o.shipping_address.phone,
+          billing_address: o.shipping_address.address,
+          billing_city: o.shipping_address.city,
+          billing_pincode: o.shipping_address.pincode,
+          billing_state: o.shipping_address.state,
+          payment_method: o.payment_method === 'COD' ? 'COD' : 'Prepaid',
+          order_total: o.gross_amount - o.discount_amount,
+          weight_kg: 0.5,
+          items: (o.items ?? []).map(item => ({
+            name: item.product_name ?? item.sku,
+            sku: item.sku,
+            units: item.quantity,
+            selling_price: item.unit_price,
+          })),
+        }
+        createShipment(
+          { email: srIntegration.credentials.email, password: srIntegration.credentials.password },
+          payload
+        ).then(res => {
+          if (res.ok && res.awb_code) {
+            // Update order with real AWB + shipment ID
+            set(state => ({
+              orders: state.orders.map(order =>
+                order.id !== o.id ? order : {
+                  ...order,
+                  shiprocket_shipment_id: res.shipment_id,
+                  shipments: order.shipments?.map(s =>
+                    s.order_id === o.id
+                      ? { ...s, awb_number: res.awb_code!, courier: res.courier_name ?? s.courier }
+                      : s
+                  ),
+                }
+              ),
+            }))
+            updateOrderDB(o.id, {
+              fulfillment_status: 'READY_TO_SHIP',
+              shiprocket_shipment_id: res.shipment_id,
+            }).catch(console.error)
+            addOrderTimelineEvent(o.id, `Shipment created via Shiprocket. AWB: ${res.awb_code} (${res.courier_name})`, 'system').catch(console.error)
+          }
+        }).catch(console.error)
+      } else if (!DEMO_MODE) {
+        // No Shiprocket connected — just persist the status
+        updateOrderDB(o.id, { fulfillment_status: 'READY_TO_SHIP' }).catch(console.error)
+        addOrderTimelineEvent(o.id, `Shipping label created. AWB: ${labelResult.awb_number}`, 'system').catch(console.error)
+      }
+
+      return {
         ...o,
         fulfillment_status: 'READY_TO_SHIP' as const,
         shipments: [
@@ -304,11 +363,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         ],
       }
-      if (!DEMO_MODE) {
-        updateOrderDB(o.id, { fulfillment_status: 'READY_TO_SHIP' }).catch(console.error)
-        addOrderTimelineEvent(o.id, `Shipping label created. AWB: ${labelResult.awb_number}`, 'system').catch(console.error)
-      }
-      return updatedOrder
     })
     set({ orders: updatedOrders })
     return result

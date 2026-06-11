@@ -41,9 +41,10 @@ export default function OrderDetail() {
     const p = products.find(x => x.id === item.product_id)
     return s + (p?.cost_price ?? 0) * item.quantity
   }, 0)
-  const shippingCost = 60
+  const shippingCost = order.shipping_cost ?? 60
+  const txnFee = (order.razorpay_fee ?? 0) + (order.razorpay_tax ?? 0)
   const rtoReserve = order.rto_risk_score >= 60 ? Math.round(revenue * 0.05) : 0
-  const netProfit = revenue - discount - cogs - shippingCost - rtoReserve
+  const netProfit = revenue - discount - cogs - shippingCost - txnFee - rtoReserve
   const margin = revenue > 0 ? (netProfit / (revenue - discount)) * 100 : 0
 
   // RTO score — enriched with live pincode data
@@ -128,6 +129,13 @@ export default function OrderDetail() {
               {discount > 0 && <PLRow label="Discount" value={-discount} />}
               <PLRow label="COGS" value={-cogs} />
               <PLRow label="Shipping Cost" value={-shippingCost} />
+              {txnFee > 0
+                ? <PLRow label={`Transaction Fee${order.razorpay_tax ? ' (incl. GST)' : ''}`} value={-txnFee} />
+                : <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Transaction Fee</span>
+                    <span className="text-gray-400 text-xs italic">pending payment</span>
+                  </div>
+              }
               {rtoReserve > 0 && <PLRow label="RTO Reserve (5%)" value={-rtoReserve} />}
               <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
                 <span className="text-sm font-semibold text-gray-900">Net Profit</span>
