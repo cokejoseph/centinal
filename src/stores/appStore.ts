@@ -72,6 +72,7 @@ interface AppState {
   flagOrder: (id: string) => void
   bulkApprove: (ids: string[]) => void
   bulkHold: (ids: string[]) => void
+  startPacking: (ids: string[]) => void
   generateLabels: (ids: string[]) => { results: ReturnType<typeof mockGenerateLabels>['results']; merged_pdf_url: string }
   resolveException: (id: string) => void
   dismissException: (id: string) => void
@@ -278,6 +279,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
     if (!DEMO_MODE) {
       ids.forEach(id => updateOrderDB(id, { rto_review_status: 'HELD' }).catch(console.error))
+    }
+  },
+
+  startPacking: (ids) => {
+    set(state => ({
+      orders: state.orders.map(o =>
+        ids.includes(o.id) ? { ...o, fulfillment_status: 'PACKING' } : o
+      ),
+    }))
+    if (!DEMO_MODE) {
+      ids.forEach(id => updateOrderDB(id, { fulfillment_status: 'PACKING' }).catch(console.error))
     }
   },
 

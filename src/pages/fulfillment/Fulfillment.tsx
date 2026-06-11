@@ -4,7 +4,6 @@ import { Tag, Calendar } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { Card, Button } from '../../components/ui'
 import { FulfillmentBadge, ChannelBadge, PaymentMethodBadge } from '../../components/shared/StatusBadge'
-import BulkActionBar from '../../components/shared/BulkActionBar'
 import type { Order } from '../../types'
 
 const TABS = [
@@ -22,11 +21,7 @@ type TabKey = typeof TABS[number]['key']
 function getTabOrders(orders: Order[], tab: TabKey): Order[] {
   switch (tab) {
     case 'pack':
-      return orders.filter(o =>
-        o.payment_status === 'PAID' &&
-        o.rto_review_status === 'APPROVED' &&
-        (o.fulfillment_status === 'CONFIRMED' || o.fulfillment_status === 'PROCESSING')
-      )
+      return orders.filter(o => o.fulfillment_status === 'PACKING')
     case 'packing':
       return orders.filter(o => o.fulfillment_status === 'PACKING')
     case 'ready':
@@ -193,7 +188,6 @@ export default function Fulfillment() {
         </div>
       </Card>
 
-      <BulkActionBar selectedIds={selected} onClear={() => setSelected([])} showGenerateLabels={tab === 'pack' || tab === 'packing'} />
     </div>
   )
 }
